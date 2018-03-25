@@ -1,3 +1,6 @@
+var http = require('http');
+var request = require('request');
+var rp = require('request-promise');
 var firebase = require("firebase");
 var admin = require("firebase-admin");
 
@@ -17,12 +20,57 @@ admin.initializeApp({
   databaseURL: 'https://gameapp-bd.firebaseio.com'
 });
 
-function writeJogoData(titulo) {
-  admin.database().ref('Jogo/qualquercoisa').set({
-    AnoLancamento: 2018,
-    Titulo: titulo,
-    Teste: 'sdsd'
+function writeJogoData(titulo, anolancamento) {
+  admin.database().ref('Jogo/'+titulo).set({
+    AnoLancamento: anolancamento,
+    Titulo: titulo
   });
 }
 
-writeJogoData("teste");
+var steamGameListUrl = 'http://api.steampowered.com/ISteamApps/GetAppList/v0002/';
+var steamGameDetailUrl = 'http://store.steampowered.com/api/appdetails?appids=';
+
+function getSteamGameList(){
+  rp({
+    method: 'GET',
+    uri: steamGameListUrl,
+    json: true
+  }).then(function(res){
+    var apps = res.applist.apps;
+    var length = apps.length;
+    (function delayHttpReqLoop (i) {
+       setTimeout(function () {
+          getGameDetails(apps[i].appid);
+          if (--i) delayHttpReqLoop(i);
+       }, 500)
+    })(apps.length-1);
+  }).catch(function (err) {
+      console.log(err);
+  });
+}
+
+function getGameDetails(appid){
+  rp({
+    method: 'GET',
+    uri: steamGameDetailUrl+appid,
+    json: true
+  }).then(function (res) {
+    var statusSuccess = res[appid].success;
+
+    if(statusSuccess){
+      var appDetails = res[appid].data;
+      var name = appDetails.name;
+      var releaseDate = appDetails.release_date.date;
+      var price = "free";
+      if(appDetails.is_free == "false"){
+        price = appDetails.price_overview.final;
+      }
+
+      writeJogoData(name, releaseDate);
+    }
+  }).catch(function (err) {
+      console.log(err);
+  });
+}
+
+getSteamGameList();
